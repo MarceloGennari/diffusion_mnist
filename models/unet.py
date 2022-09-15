@@ -8,15 +8,16 @@ works fine, even though might be a bit of an overly large model.
 """
 
 import torch
+from torch import nn
 from .common import SinusoidalPositionEmbeddings, TemporalEmbedding
 
 
-class ConvGroupNorm(torch.nn.Module):
+class ConvGroupNorm(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
-        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, 3, padding=1)
-        self.batch1 = torch.nn.BatchNorm2d(out_channels)
-        self.relu1 = torch.nn.ReLU()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
+        self.batch1 = nn.BatchNorm2d(out_channels)
+        self.relu1 = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
@@ -25,36 +26,39 @@ class ConvGroupNorm(torch.nn.Module):
         return x
 
 
-class UNet(torch.nn.Module):
+class UNet(nn.Module):
     def __init__(self, dim_emb: int = 64):
+        ch = [32, 64, 64, 32]
         super().__init__()
         # Positional Embedding
         self.temb = SinusoidalPositionEmbeddings(dim_emb)
         self.embedding1 = TemporalEmbedding(dim_emb, 1)
 
         # Input is 1x28x28
-        self.block1 = ConvGroupNorm(1, 16)
-        self.down1 = torch.nn.MaxPool2d(2)
-
-        # Now input is 16x14x14
-        self.embedding2 = TemporalEmbedding(dim_emb, 16)
-        self.block2 = ConvGroupNorm(16, 32)
-        self.down2 = torch.nn.MaxPool2d(2)
-
-        # Now input is 32x7x7
-        self.embedding3 = TemporalEmbedding(dim_emb, 32)
-        self.block3 = ConvGroupNorm(32, 32)
-        self.up1 = torch.nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+        self.block1 = ConvGroupNorm(1, ch[0])
+        self.down1 = nn.MaxPool2d(2)
 
         # Now input is 32x14x14
-        self.embedding4 = TemporalEmbedding(dim_emb, 64)
-        self.block4 = ConvGroupNorm(64, 32)
-        self.up2 = torch.nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+        self.embedding2 = TemporalEmbedding(dim_emb, ch[0])
+        self.block2 = ConvGroupNorm(ch[0], ch[1])
+        self.down2 = nn.MaxPool2d(2)
+
+        # Now input is 64x7x7
+        self.embedding3 = TemporalEmbedding(dim_emb, ch[1])
+        self.block3 = ConvGroupNorm(ch[1], ch[2])
+        self.up1 = nn.ConvTranspose2d(ch[2], ch[2], kernel_size=2, stride=2)
+
+        # Now input is 64x14x14
+        new_ch = ch[2] + ch[1]
+        self.embedding4 = TemporalEmbedding(dim_emb, new_ch)
+        self.block4 = ConvGroupNorm(new_ch, ch[3])
+        self.up2 = nn.ConvTranspose2d(ch[3], ch[3], kernel_size=2, stride=2)
 
         # Now input is 16x28x28
-        self.embedding5 = TemporalEmbedding(dim_emb, 48)
-        self.block5 = ConvGroupNorm(48, 1)
-        self.out = torch.nn.Conv2d(1, 1, 1)
+        new_ch = ch[3] + ch[0]
+        self.embedding5 = TemporalEmbedding(dim_emb, new_ch)
+        self.block5 = ConvGroupNorm(new_ch, 1)
+        self.out = nn.Conv2d(1, 1, 1)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         x0 = self.embedding1(x, self.temb(t))

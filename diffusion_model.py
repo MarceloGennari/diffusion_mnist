@@ -73,3 +73,31 @@ class DiffusionProcess:
 
         diffused_images = mean_multiplier * x_0 + std_dev * noise
         return diffused_images
+
+    def inverse(self, xt: Tensor, et: Tensor, t: int) -> Tensor:
+        """
+        This applies the unconditional sampling of the diffusion step. It uses the
+        equation as follow:
+            p(x_{t-1}| x_t) = mu_t + std_dev_t * N(0, I)
+            mu_t = (1/sqrt(alpha_t)) * (xt - noise_scale * et)
+            noise_scale = (1-alpha_t) / sqrt(1-alpha_bar_t)
+            std_dev_t = sqrt(variance_schedule)
+        this is from the DDPM paper.
+
+        Args:
+            xt (torch.Tensor): noisy image at time ``t``.
+            et (torch.Tensor): predicted error from diffusion model, which is
+                usually the output of the trained UNet architecture
+            t (int): the time ``t`` of the diffusion process
+
+        Returns:
+            torch.Tensor: the result of the sampling x_{t-1}
+        """
+        scale = 1 / torch.sqrt(self.alpha[t])
+        noise_scale = (1 - self.alpha[t]) / torch.sqrt(1 - self.alpha_bar[t])
+        std_dev = torch.sqrt(self.variance_schedule[t])
+        mu_t = scale * (xt - noise_scale * et)
+
+        z = torch.randn(xt.shape) if t > 1 else torch.Tensor([0])
+        xt = mu_t + std_dev * z  # remove noise from iamge
+        return xt
