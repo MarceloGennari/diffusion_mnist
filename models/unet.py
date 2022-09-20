@@ -30,8 +30,8 @@ class ConvGroupNorm(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, dim_emb: int = 128):
-        ch = [32, 64, 64, 32]
+    def __init__(self, dim_emb: int = 1024):
+        ch = [64, 128, 128, 64]
         super().__init__()
         # Positional Embedding
         self.temb = SinusoidalPositionEmbeddings(dim_emb)

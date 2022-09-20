@@ -101,3 +101,25 @@ class DiffusionProcess:
         z = torch.randn(xt.shape) if t > 1 else torch.Tensor([0])
         xt = mu_t + std_dev * z  # remove noise from iamge
         return xt
+
+    def inverse_DDIM(self, xt: Tensor, et: Tensor, t: int) -> Tensor:
+        """
+        This applies the unconditional sampling of the diffusion step using the
+        DDIM method: https://arxiv.org/abs/2010.02502
+        f_theta acts as an approximation for x_0, and the rest follows equation
+        (7) in the paper. For DDIM, we have that std_dev = 0
+        This solves the problem of stochasticity, and it is supposed to be 10x
+        to 100x quicker than the DDPM method
+        """
+        den = 1 / torch.sqrt(self.alpha_bar[t])
+        f_theta = (xt - torch.sqrt(1 - self.alpha_bar[t]) * et) * den
+        if t > 0:
+            part1 = torch.sqrt(self.alpha_bar[t - 1]) * f_theta
+            part2 = torch.sqrt(1 - self.alpha_bar[t - 1])
+            den = 1 / torch.sqrt(1 - self.alpha_bar[t])
+            scale = (xt - torch.sqrt(self.alpha_bar[t]) * f_theta) * den
+            xt = part1 + part2 * scale
+        else:
+            xt = f_theta
+
+        return xt
