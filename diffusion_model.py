@@ -99,7 +99,7 @@ class DiffusionProcess:
         mu_t = scale * (xt - noise_scale * et)
 
         z = torch.randn(xt.shape) if t > 1 else torch.Tensor([0])
-        xt = mu_t + std_dev * z  # remove noise from iamge
+        xt = mu_t + std_dev * z  # remove noise from image
         return xt
 
     def inverse_DDIM(self, xt: Tensor, et: Tensor, t: int) -> Tensor:
