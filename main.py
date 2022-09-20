@@ -26,13 +26,13 @@ if __name__ == "__main__":
     # Prepare model and training
     model = UNet()
     process = DiffusionProcess()
-    optimizer = optim.SGD(model.parameters(), 0.01, 0.99, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, 30)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, 50)
     criterion = torch.nn.MSELoss()
 
     # Training Loop
     epochs = 60
-    for e in trange(60):
+    for e in trange(epochs):
         running_loss = 0
         for image, label in tqdm(trainloader, leave=False):
             # Sampling t, epsilon, and diffused image
