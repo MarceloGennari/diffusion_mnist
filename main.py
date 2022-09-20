@@ -16,7 +16,7 @@ from torch import optim
 from mnist_dataset import get_mnist_dataloader
 from diffusion_model import DiffusionProcess
 
-from models.unet import UNet
+from models import ConditionalUNet
 
 if __name__ == "__main__":
     # Prepare images
@@ -24,14 +24,14 @@ if __name__ == "__main__":
     idx, (images, labels) = next(enumerate(testloader))
 
     # Prepare model and training
-    model = UNet()
+    model = ConditionalUNet()
     process = DiffusionProcess()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, 50)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, 80)
     criterion = torch.nn.MSELoss()
 
     # Training Loop
-    epochs = 60
+    epochs = 100
     for e in trange(epochs):
         running_loss = 0
         for image, label in tqdm(trainloader, leave=False):
@@ -42,11 +42,12 @@ if __name__ == "__main__":
 
             # Backprop
             optimizer.zero_grad()
-            output = model(diffused_image, t)
+            output = model(diffused_image, t, label)
             loss = criterion(epsilon, output)
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            print(loss.item())
 
         scheduler.step()
 

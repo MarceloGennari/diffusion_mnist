@@ -9,36 +9,32 @@ works fine, even though might be a bit of an overly large model.
 
 import torch
 from torch import nn
-from .common import TemporalEmbedding, LinearAttention
+from .common import TemporalEmbedding, LinearAttention, CrossAttention
 
 
 class ResConvGroupNorm(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
+        conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
         batch1 = nn.BatchNorm2d(out_channels)
         relu1 = nn.ReLU()
 
         conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
         batch2 = nn.BatchNorm2d(out_channels)
         relu2 = nn.ReLU()
-
-        conv3 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
-        batch3 = nn.BatchNorm2d(out_channels)
-        self.relu3 = nn.ReLU()
-        layers = [batch1, relu1, conv2, batch2, relu2, conv3, batch3]
+        layers = [conv1, batch1, relu1, conv2, batch2, relu2]
 
         self.feat = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv1(x)
-        return self.relu3(x + self.feat(x))
+        return self.feat(x)
 
 
 class UNet(nn.Module):
     def __init__(self, dim_emb: int = 1024):
-        ch = [64, 128, 128, 64]
         super().__init__()
+        ch = [64, 128, 128, 64]
+        self.ch = ch
         # Positional Embedding
         self.embedding1 = TemporalEmbedding(dim_emb, 1)
 
@@ -80,6 +76,34 @@ class UNet(nn.Module):
         x4 = self.embedding4(x4, t)
         x5 = self.up2(self.block4(x4))
         x6 = torch.cat([x5, x1], dim=1)
+        x6 = self.embedding5(x6, t)
+        out = self.out(self.block5(x6))
+        return out
+
+class ConditionalUNet(UNet):
+    def __init__(self, dim_emb: int = 1024):
+        super().__init__(dim_emb)
+        self.cross_att1 = CrossAttention(self.ch[0])
+        self.cross_att2 = CrossAttention(self.ch[1])
+        self.cross_att3 = CrossAttention(self.ch[2])
+        self.cross_att4 = CrossAttention(self.ch[3])
+        self.cross_att5 = CrossAttention(self.ch[3] + self.ch[0])
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+        x0 = self.embedding1(x, t)
+        x1 = self.block1(x0)
+        x1 = self.cross_att1(x1, label)
+        x1 = self.embedding2(x1, t)
+        x2 = self.block2(self.down1(x1))
+        x2 = self.cross_att2(x2, label)
+        x2 = self.embedding3(x2, t)
+        crossed = self.cross_att3(self.block3(self.down2(x2)), label)
+        x3 = self.up1(self.attention1(crossed))
+        x4 = torch.cat([x2, x3], dim=1)
+        x4 = self.embedding4(x4, t)
+        x5 = self.up2(self.cross_att4(self.block4(x4), label))
+        x6 = torch.cat([x5, x1], dim=1)
+        x6 = self.cross_att5(x6, label)
         x6 = self.embedding5(x6, t)
         out = self.out(self.block5(x6))
         return out
