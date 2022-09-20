@@ -25,14 +25,14 @@ class ResConvGroupNorm(nn.Module):
 
         conv3 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
         batch3 = nn.BatchNorm2d(out_channels)
-        relu3 = nn.ReLU()
-        layers = [batch1, relu1, conv2, batch2, relu2, conv3, batch3, relu3]
+        self.relu3 = nn.ReLU()
+        layers = [batch1, relu1, conv2, batch2, relu2, conv3, batch3]
 
         self.feat = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
-        return x + self.feat(x)
+        return self.relu3(x + self.feat(x))
 
 
 class UNet(nn.Module):
