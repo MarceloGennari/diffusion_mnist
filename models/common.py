@@ -50,36 +50,38 @@ class LayerNorm(torch.nn.Module):
 
     def forward(self, x):
         eps = 1e-5 if x.dtype == torch.float32 else 1e-3
-        var = torch.var(x, dim = 1, unbiased = False, keepdim = True)
-        mean = torch.mean(x, dim = 1, keepdim = True)
+        var = torch.var(x, dim=1, unbiased=False, keepdim=True)
+        mean = torch.mean(x, dim=1, keepdim=True)
         return (x - mean) * (var + eps).rsqrt() * self.g
 
+
 class LinearAttention(torch.nn.Module):
-    def __init__(self, dim, heads = 4, dim_head = 32):
+    def __init__(self, dim, heads=4, dim_head=32):
         super().__init__()
-        self.scale = dim_head ** -0.5
+        self.scale = dim_head**-0.5
         self.heads = heads
         hidden_dim = dim_head * heads
-        self.to_qkv = torch.nn.Conv2d(dim, hidden_dim * 3, 1, bias = False)
+        self.to_qkv = torch.nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
 
         self.to_out = torch.nn.Sequential(
-            torch.nn.Conv2d(hidden_dim, dim, 1),
-            LayerNorm(dim)
+            torch.nn.Conv2d(hidden_dim, dim, 1), LayerNorm(dim)
         )
 
     def forward(self, x):
         b, c, h, w = x.shape
-        qkv = self.to_qkv(x).chunk(3, dim = 1)
-        q, k, v = map(lambda t: rearrange(t, 'b (h c) x y -> b h c (x y)', h = self.heads), qkv)
+        qkv = self.to_qkv(x).chunk(3, dim=1)
+        q, k, v = map(
+            lambda t: rearrange(t, "b (h c) x y -> b h c (x y)", h=self.heads), qkv
+        )
 
-        q = q.softmax(dim = -2)
-        k = k.softmax(dim = -1)
+        q = q.softmax(dim=-2)
+        k = k.softmax(dim=-1)
 
         q = q * self.scale
         v = v / (h * w)
 
-        context = torch.einsum('b h d n, b h e n -> b h d e', k, v)
+        context = torch.einsum("b h d n, b h e n -> b h d e", k, v)
 
-        out = torch.einsum('b h d e, b h d n -> b h e n', context, q)
-        out = rearrange(out, 'b h c (x y) -> b (h c) x y', h = self.heads, x = h, y = w)
+        out = torch.einsum("b h d e, b h d n -> b h e n", context, q)
+        out = rearrange(out, "b h c (x y) -> b (h c) x y", h=self.heads, x=h, y=w)
         return self.to_out(out)
