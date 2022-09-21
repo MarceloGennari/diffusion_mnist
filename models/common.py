@@ -11,7 +11,7 @@ https://github.com/lucidrains/denoising-diffusion-pytorch
 
 import torch
 import math
-from einops import rearrange, reduce
+from einops import rearrange
 
 
 class SinusoidalPositionEmbeddings(torch.nn.Module):
@@ -38,6 +38,20 @@ class TemporalEmbedding(torch.nn.Module):
     def forward(self, x: torch.Tensor, time: torch.Tensor) -> torch.Tensor:
         temb = self.temb(time)
         emb = self.linear(temb)
+        emb = emb[:, :, None, None]
+        out = x + emb
+        return out
+
+
+class LabelEmbedding(torch.nn.Module):
+    def __init__(self, dim_emb: int, dim_out: int) -> None:
+        super().__init__()
+        self.linear = torch.nn.Linear(dim_emb, dim_out)
+        self.lemb = torch.nn.Embedding(10, dim_emb)
+
+    def forward(self, x: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+        lemb = self.lemb(label)
+        emb = self.linear(lemb)
         emb = emb[:, :, None, None]
         out = x + emb
         return out
@@ -84,41 +98,4 @@ class LinearAttention(torch.nn.Module):
 
         out = torch.einsum("b h d e, b h d n -> b h e n", context, q)
         out = rearrange(out, "b h c (x y) -> b (h c) x y", h=self.heads, x=h, y=w)
-        return self.to_out(out)
-
-
-class CrossAttention(torch.nn.Module):
-    def __init__(self, dim, heads=4, dim_head=32):
-        super().__init__()
-        self.scale = dim_head**-0.5
-        self.heads = heads
-        hidden_dim = dim_head * heads
-        self.dim_head = dim_head
-
-        self.label_embedding = torch.nn.Embedding(10, dim)
-
-        self.to_qv = torch.nn.Conv2d(dim, hidden_dim * 2, 1, bias=False)
-        self.to_k = torch.nn.Linear(dim, hidden_dim)
-
-        self.to_out = torch.nn.Sequential(
-            torch.nn.Conv2d(hidden_dim, dim, 1),
-            LayerNorm(dim)
-        )
-
-    def forward(self, x: torch.Tensor, label: torch.Tensor):
-        b, c, h, w = x.shape
-        qv = self.to_qv(x).chunk(2, dim=1)
-        q, v = map(lambda t: rearrange(t, 'b (h c) x y -> b h c (x y)', h = self.heads), qv)
-
-        label_embedding = self.label_embedding(label)
-        k = self.to_k(label_embedding)
-        k = k.view(b, self.heads, self.dim_head).unsqueeze(-1)
-
-        q = q.softmax(dim = -2)
-        k = k.softmax(dim = -1)
-
-        context = torch.einsum('b h d n, b h e n -> b h d e', k, v)
-
-        out = torch.einsum('b h d e, b h d n -> b h e n', context, q)
-        out = rearrange(out, 'b h c (x y) -> b (h c) x y', h = self.heads, x = h, y = w)
         return self.to_out(out)

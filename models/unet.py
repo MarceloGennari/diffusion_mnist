@@ -8,8 +8,8 @@ works fine, even though might be a bit of an overly large model.
 """
 
 import torch
-from torch import nn
-from .common import TemporalEmbedding, LinearAttention, CrossAttention
+from torch import nn, Tensor
+from .common import TemporalEmbedding, LinearAttention, LabelEmbedding
 
 
 class ResConvGroupNorm(nn.Module):
@@ -27,7 +27,7 @@ class ResConvGroupNorm(nn.Module):
 
         self.feat = nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         x = self.conv1(x)
         return x + self.feat(x)
 
@@ -67,7 +67,7 @@ class UNet(nn.Module):
         self.block5 = ResConvGroupNorm(new_ch, 1)
         self.out = nn.Conv2d(1, 1, 1)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor, t: Tensor) -> Tensor:
         x0 = self.embedding1(x, t)
         x1 = self.block1(x0)
         x1 = self.embedding2(x1, t)
@@ -82,30 +82,31 @@ class UNet(nn.Module):
         out = self.out(self.block5(x6))
         return out
 
+
 class ConditionalUNet(UNet):
     def __init__(self, dim_emb: int = 1024):
         super().__init__(dim_emb)
-        self.cross_att1 = CrossAttention(self.ch[0])
-        self.cross_att2 = CrossAttention(self.ch[1])
-        self.cross_att3 = CrossAttention(self.ch[2])
-        self.cross_att4 = CrossAttention(self.ch[3])
-        self.cross_att5 = CrossAttention(self.ch[3] + self.ch[0])
+        self.label_emb1 = LabelEmbedding(dim_emb, self.ch[0])
+        self.label_emb2 = LabelEmbedding(dim_emb, self.ch[1])
+        self.label_emb3 = LabelEmbedding(dim_emb, self.ch[2])
+        self.label_emb4 = LabelEmbedding(dim_emb, self.ch[3])
+        self.label_emb5 = LabelEmbedding(dim_emb, self.ch[3] + self.ch[0])
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor, t: Tensor, label: Tensor) -> Tensor:
         x0 = self.embedding1(x, t)
         x1 = self.block1(x0)
-        x1 = self.cross_att1(x1, label)
+        x1 = self.label_emb1(x1, label)
         x1 = self.embedding2(x1, t)
         x2 = self.block2(self.down1(x1))
-        x2 = self.cross_att2(x2, label)
+        x2 = self.label_emb2(x2, label)
         x2 = self.embedding3(x2, t)
-        crossed = self.cross_att3(self.block3(self.down2(x2)), label)
+        crossed = self.label_emb3(self.block3(self.down2(x2)), label)
         x3 = self.up1(self.attention1(crossed))
         x4 = torch.cat([x2, x3], dim=1)
         x4 = self.embedding4(x4, t)
-        x5 = self.up2(self.cross_att4(self.block4(x4), label))
+        x5 = self.up2(self.label_emb4(self.block4(x4), label))
         x6 = torch.cat([x5, x1], dim=1)
-        x6 = self.cross_att5(x6, label)
+        x6 = self.label_emb5(x6, label)
         x6 = self.embedding5(x6, t)
         out = self.out(self.block5(x6))
         return out

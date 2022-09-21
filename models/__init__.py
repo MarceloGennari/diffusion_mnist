@@ -1,2 +1,2 @@
-from .common import SinusoidalPositionEmbeddings, CrossAttention
+from .common import SinusoidalPositionEmbeddings, LabelEmbedding
 from .unet import UNet, ConditionalUNet
