@@ -16,7 +16,7 @@ from torch import optim
 from mnist_dataset import get_mnist_dataloader
 from diffusion_model import DiffusionProcess
 
-from models import ConditionalUNet
+from models import UNet
 
 if __name__ == "__main__":
     # Prepare images
@@ -24,9 +24,10 @@ if __name__ == "__main__":
     idx, (images, labels) = next(enumerate(testloader))
 
     # Prepare model and training
-    model = ConditionalUNet()
+    device = "cpu"
+    model = UNet().to(device)
     process = DiffusionProcess()
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=2e-4)
     scheduler = optim.lr_scheduler.StepLR(optimizer, 80)
     criterion = torch.nn.MSELoss()
 
@@ -34,7 +35,8 @@ if __name__ == "__main__":
     epochs = 100
     for e in trange(epochs):
         running_loss = 0
-        for image, label in tqdm(trainloader, leave=False):
+        progress_bar = tqdm(trainloader, leave=False)
+        for image, label in progress_bar:
             # Sampling t, epsilon, and diffused image
             t = torch.randint(0, 1000, (image.shape[0],))
             epsilon = torch.randn(image.shape)
@@ -42,12 +44,13 @@ if __name__ == "__main__":
 
             # Backprop
             optimizer.zero_grad()
-            output = model(diffused_image, t, label)
-            loss = criterion(epsilon, output)
+            output = model(diffused_image.to(device), t.to(device))
+            loss = criterion(epsilon.to(device), output)
             loss.backward()
             optimizer.step()
-            running_loss += loss.item()
-            print(loss.item())
+            loss_value = loss.cpu().item()
+            running_loss += loss_value
+            progress_bar.set_description(f"Loss: {loss_value:.4f}")
 
         scheduler.step()
 

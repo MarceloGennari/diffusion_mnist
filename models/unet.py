@@ -15,19 +15,21 @@ from .common import TemporalEmbedding, LinearAttention, CrossAttention
 class ResConvGroupNorm(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
-        conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1, bias=False)
         batch1 = nn.BatchNorm2d(out_channels)
-        relu1 = nn.ReLU()
+        relu1 = nn.LeakyReLU()
 
-        conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
+        conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1, bias=False)
         batch2 = nn.BatchNorm2d(out_channels)
-        relu2 = nn.ReLU()
-        layers = [conv1, batch1, relu1, conv2, batch2, relu2]
+        relu2 = nn.LeakyReLU()
+
+        layers = [batch1, relu1, conv2, batch2, relu2]
 
         self.feat = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.feat(x)
+        x = self.conv1(x)
+        return x + self.feat(x)
 
 
 class UNet(nn.Module):
@@ -40,24 +42,24 @@ class UNet(nn.Module):
 
         # Input is 1x28x28
         self.block1 = ResConvGroupNorm(1, ch[0])
-        self.down1 = nn.Conv2d(ch[0], ch[0], 4, stride=2, padding=1)
+        self.down1 = nn.Conv2d(ch[0], ch[0], 4, stride=2, padding=1, bias=False)
 
         # Now input is 32x14x14
         self.embedding2 = TemporalEmbedding(dim_emb, ch[0])
         self.block2 = ResConvGroupNorm(ch[0], ch[1])
-        self.down2 = nn.Conv2d(ch[1], ch[1], 4, stride=2, padding=1)
+        self.down2 = nn.Conv2d(ch[1], ch[1], 4, stride=2, padding=1, bias=False)
 
         # Now input is 64x7x7
         self.embedding3 = TemporalEmbedding(dim_emb, ch[1])
         self.block3 = ResConvGroupNorm(ch[1], ch[2])
         self.attention1 = LinearAttention(ch[2])
-        self.up1 = nn.ConvTranspose2d(ch[2], ch[2], 4, stride=2, padding=1)
+        self.up1 = nn.ConvTranspose2d(ch[2], ch[2], 4, stride=2, padding=1, bias=False)
 
         # Now input is 64x14x14
         new_ch = ch[2] + ch[1]
         self.embedding4 = TemporalEmbedding(dim_emb, new_ch)
         self.block4 = ResConvGroupNorm(new_ch, ch[3])
-        self.up2 = nn.ConvTranspose2d(ch[3], ch[3], 4, stride=2, padding=1)
+        self.up2 = nn.ConvTranspose2d(ch[3], ch[3], 4, stride=2, padding=1, bias=False)
 
         # Now input is 16x28x28
         new_ch = ch[3] + ch[0]

@@ -20,8 +20,9 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     # Prepare model
+    device = "cpu"
     batch_size = 100
-    model = UNet()
+    model = UNet().to(device)
     model.load_state_dict(torch.load("unet_mnist.pth"))
     process = DiffusionProcess()
 
@@ -32,8 +33,8 @@ if __name__ == "__main__":
     with torch.no_grad():
         for t in trange(999, -1, -1):
             time = torch.ones(batch_size) * t
-            et = model(xt, time)  # predict noise
-            xt = process.inverse_DDIM(xt, et, t)
+            et = model(xt.to(device), time.to(device))  # predict noise
+            xt = process.inverse_DDIM(xt, et.cpu(), t)
 
     labels = ["Generated Images"] * 9
 
