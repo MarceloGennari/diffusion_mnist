@@ -2,12 +2,18 @@
 Marcelo Gennari do Nascimento, 2022
 marcelogennari@outlook.com
 
-This script performs the sampling given the trained UNet model
+This script performs sampling by using the DDIM algorithm, which is a
+deterministic solution to the generation of images:
+https://arxiv.org/abs/2010.02502
+
+It is supposed to be 10x to 100x quicker, and it uses the same training 
+procedure as DDPM, so the trained model can be reused here
 """
+
 from tqdm import trange
 
 import torch
-from models import UNet
+from models import ConditionalUNet
 from diffusion_model import DiffusionProcess
 
 import matplotlib.pyplot as plt
@@ -16,7 +22,7 @@ if __name__ == "__main__":
     # Prepare model
     device = "cpu"
     batch_size = 100
-    model = UNet().to(device)
+    model = ConditionalUNet().to(device)
     model.load_state_dict(torch.load("unet_mnist.pth"))
     process = DiffusionProcess()
 
@@ -27,8 +33,10 @@ if __name__ == "__main__":
     with torch.no_grad():
         for t in trange(999, -1, -1):
             time = torch.ones(batch_size) * t
-            et = model(xt.to(device), time.to(device))  # predict noise
-            xt = process.inverse(xt, et.cpu(), t)
+            et = model(
+                xt.to(device), time.to(device), torch.Tensor([9]).to(dtype=torch.long)
+            )  # predict noise
+            xt = process.inverse_DDIM(xt, et.cpu(), t)
 
     labels = ["Generated Images"] * 9
 
